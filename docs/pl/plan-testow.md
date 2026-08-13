@@ -19,13 +19,13 @@ Sprawdzić, czy API Restful Booker działa zgodnie z publiczną dokumentacją w 
 - `POST /booking`, `GET /booking`, `GET /booking/:id`
 - `PUT /booking/:id`, `PATCH /booking/:id`
 - `DELETE /booking/:id`
-- Negatywy: złe dane logowania, brakujące pola, nieistniejące ID, brak tokenu, niepoprawny zakres dat
+- Negatywy: złe dane logowania, brakujące pola, nieistniejące ID, brak tokenu, niepoprawny zakres dat, błędne typy
 
 **Poza zakresem**
 
 - UI ewentualnego frontendu
-- Wydajność / obciążenie (JMeter) — `[UZUPEŁNIJ: zostawiam / dodam później]`
-- Bezpieczeństwo poza brakiem/błędnym tokenem
+- Testy wydajnościowe / obciążeniowe (JMeter) — poza tym projektem
+- Bezpieczeństwo poza brakiem lub błędnym tokenem
 - Inne środowiska niż publiczne demo
 
 ## 3. Obiekt i środowisko
@@ -42,42 +42,42 @@ Sprawdzić, czy API Restful Booker działa zgodnie z publiczną dokumentacją w 
 
 | Rodzaj | Pokryte? | Uwagi |
 |---|---|---|
-| Smoke | tak | Ping + create + get |
-| Funkcjonalne (pozytywne) | tak | foldery 00–05 |
+| Smoke | tak | Ping + create + get (TC-001, TC-003, TC-004) |
+| Funkcjonalne (pozytywne) | tak | foldery 00–04 i 06 |
 | Negatywne / walidacja | tak | TC-009–TC-012, TC-017–TC-019, TC-022 |
 | Autoryzacja | tak | TC-014, TC-015, TC-020, TC-021 (folder 05, przed DELETE) |
-| Kontrakt / schema | opcjonalnie | `[UZUPEŁNIJ]` |
-| Regresja | CI przy każdym pushu | Newman |
+| Kontrakt / schema | nie | Tylko asercje na pola, bez JSON Schema |
+| Regresja | tak | Newman przy każdym pushu (GitHub Actions) |
 
 ## 5. Podejście
 
-1. Eksploracja w Postmanie, potem zamrożenie asercji w kolekcji.
-2. Najpierw happy path (już zrobiony w szkielecie).
-3. Negatywy: zaobserwuj faktyczne zachowanie → wpisz expected → jeśli kłóci się z dokumentacją lub zdrowym rozsądkiem, zgłoś buga.
-4. Newman w GitHub Actions jako bramka smoke/regresji.
+1. Eksploracja API w Postmanie, potem zamrożenie asercji w kolekcji.
+2. Najpierw happy path (auth → create → get → update → delete).
+3. Negatywy: zapis faktycznego zachowania, porównanie z dokumentacją / oczekiwaniem jakościowym, zgłoszenie buga przy rozjeździe.
+4. Newman w GitHub Actions jako bramka smoke i regresji.
 
 ## 6. Kryteria wejścia
 
-- [ ] Kolekcja importuje się bez błędów
-- [ ] Wybrane środowisko (`Restful Booker — Local`)
-- [ ] `GET /ping` kończy się sukcesem
-- [ ] `[UZUPEŁNIJ]`
+- [x] Kolekcja importuje się bez błędów
+- [x] Wybrane środowisko (`Restful Booker — Local`)
+- [x] `GET /ping` zwraca 201
+- [x] Node.js 20+ i `npm install` zakończone
 
 ## 7. Kryteria wyjścia
 
-- [ ] Wszystkie przypadki w `przypadki-testowe.md` mają status Pass / Fail / Blocked
-- [ ] Fail ma ID buga albo udokumentowane ograniczenie
-- [ ] `npm test` (happy path) jest zielone lokalnie i na CI
-- [ ] Co najmniej `[UZUPEŁNIJ: np. 2]` zgłoszenia, **jeśli** są defekty; jeśli brak — krótka notatka „nie znaleziono”
-- [ ] `[UZUPEŁNIJ]`
+- [x] Wszystkie przypadki w `przypadki-testowe.md` mają status Pass lub Fail
+- [x] Fail ma ID buga (BUG-001, BUG-002, BUG-003)
+- [x] `npm test` jest zielone lokalnie i na CI (22 requesty, 48 asercji)
+- [x] Trzy zgłoszenia w `docs/bugs/`
+- [x] Udokumentowana kolejność kolekcji (foldery 00–07)
 
 ## 8. Dostarczane artefakty
 
 - Kolekcja Postmana + environment
-- Raport Newman (HTML/JSON)
+- Raport Newman HTML/JSON (`reports/` po `npm test`)
 - Ten plan
-- Lista przypadków
-- Bug reporty w `docs/bugs/`
+- Lista przypadków (TC-001–TC-022)
+- Zgłoszenia BUG-001, BUG-002, BUG-003
 
 ## 9. Ryzyka
 
@@ -85,22 +85,22 @@ Sprawdzić, czy API Restful Booker działa zgodnie z publiczną dokumentacją w 
 |---|---|---|
 | Publiczne, współdzielone API | Średni | Twórz własną rezerwację; nie polegaj na cudzych ID |
 | Niedostępność / wolne odpowiedzi | Średni | Retry; budżet czasu asercji 3 s |
-| Dokumentacja ≠ rzeczywistość | Niski (w portfolio: plus) | Zgłaszaj bugi, nie ukrywaj ich w testach |
-| `[UZUPEŁNIJ]` | | |
+| Dokumentacja ≠ rzeczywistość | Niski | Zgłaszaj bugi; w Newmanie aseruj faktyczną odpowiedź |
+| `GET /booking?firstname=` trafia też w cudze rezerwacje | Niski | Sprawdzaj obecność własnego `bookingId`, nie długość listy = 1 |
 
 ## 10. Harmonogram
 
 | Kamień milowy | Data |
 |---|---|
-| Plan gotowy | `[DATA]` |
-| Happy path zautomatyzowany | `[DATA]` |
-| Negatywy + przypadki uzupełnione | `[DATA]` |
-| Bugi spisane | `[DATA]` |
-| CI zielone na GitHubie | `[DATA]` |
+| Plan gotowy | 2026-08-13 |
+| Happy path zautomatyzowany | 2026-08-13 |
+| Negatywy + przypadki uzupełnione | 2026-08-13 |
+| Bugi spisane | 2026-08-13 |
+| CI zielone na GitHubie | 2026-08-13 |
 
 ## 11. Akceptacja
 
 | Rola | Imię | Data |
 |---|---|---|
-| Autor (tester) | `[UZUPEŁNIJ]` | `[DATA]` |
-| Reviewer (opcjonalnie) | `[UZUPEŁNIJ]` | `[DATA]` |
+| Autor (tester) | Krzysztof Pabich | 2026-08-13 |
+| Reviewer | — | — |

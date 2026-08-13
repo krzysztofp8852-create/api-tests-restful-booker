@@ -1,0 +1,10 @@
+node_modules/
+reports/*
+!reports/.gitkeep
+.DS_Store
+.env
+*.log
+.idea/
+.vscode/
+*.html
+!docs/**

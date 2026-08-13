@@ -5,7 +5,6 @@ English copy: [`../en/test-cases.md`](../en/test-cases.md)
 
 **Statusy:** `Not run` · `Pass` · `Fail` · `Blocked` · `Skipped`
 
-Wpisz wiersz po wykonaniu. TC-001–TC-007 to wzorzec happy path — **odpal je i ustaw prawdziwy status**. Puste ID są Twoje.
 
 | ID | Tytuł | Typ | Priorytet | Warunki wstępne | Kroki | Oczekiwany rezultat | Status | Bug / uwagi |
 |---|---|---|---|---|---|---|---|---|

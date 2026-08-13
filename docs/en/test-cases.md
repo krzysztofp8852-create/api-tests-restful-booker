@@ -5,8 +5,6 @@ Polish copy: [`../pl/przypadki-testowe.md`](../pl/przypadki-testowe.md)
 
 **Status values:** `Not run` · `Pass` · `Fail` · `Blocked` · `Skipped`
 
-Fill a row when you execute the case. Happy-path examples (TC-001–TC-007) are pre-filled as a pattern — **re-run them and set the real status**. Empty IDs are yours.
-
 | ID | Title | Type | Priority | Preconditions | Steps | Expected | Status | Bug / notes |
 |---|---|---|---|---|---|---|---|---|
 | TC-001 | Health check — ping | Smoke | High | API reachable | 1. `GET /ping` | Status **201**, body contains `Created` | Not run | Postman: 00 Health |

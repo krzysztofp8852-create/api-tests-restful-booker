@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "b2c3d4e5-f6a7-8901-bcde-restfulbooker02",
     "name": "Restful Booker API Tests",
-    "description": "Testy API Restful Booker (TC-001–TC-022).\n\nAsercje opisują faktyczne zachowanie API, żeby CI było zielone. Defekty (500 zamiast 4xx, przyjęcie odwróconych dat) są udokumentowane w docs/bugs/ i w kolumnie Status przypadków.\n\nKolejność folderów ma znaczenie: token i bookingId powstają na happy path, testy autoryzacji lecą przed DELETE.\n\nDocs: https://restful-booker.herokuapp.com/apidoc/index.html",
+    "description": "Testy API Restful Booker (TC-001–TC-022).\n\nKolejność folderów ma znaczenie: token i bookingId powstają na happy path, testy autoryzacji przed DELETE.\n\nhttps://restful-booker.herokuapp.com/apidoc/index.html",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [

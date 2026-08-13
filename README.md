@@ -1,36 +1,12 @@
-# Restful Booker — testy API
+# Testy API — Restful Booker
 
-Stanowisko testera API: **Postman + Newman + GitHub Actions**.
-**22 przypadki (TC-001–TC-022)** pokryte kolekcją Postmana. Happy path, negatywy i trzy zgłoszone defekty.
+Testy API [Restful Booker](https://restful-booker.herokuapp.com/apidoc/index.html): Postman, Newman, GitHub Actions.
 
-**English:** see [README_EN.md](README_EN.md).
+Zakres: autoryzacja, CRUD rezerwacji, scenariusze negatywne. 22 przypadki (TC-001–TC-022). Znalezione defekty są w `docs/bugs/`.
 
-## Cel
+[English version](README_EN.md)
 
-Przetestować publiczne API [Restful Booker](https://restful-booker.herokuapp.com/apidoc/index.html):
-
-- autoryzacja (token)
-- CRUD rezerwacji
-- scenariusze negatywne (walidacja, brak auth, nieistniejące ID)
-
-To API jest współdzielone i celowo niedoskonałe — nadaje się do zgłaszania defektów.
-
-## Struktura
-
-```
-postman/          kolekcja + environment
-docs/en/          plan, przypadki (EN — pod CV / rekrutera)
-docs/pl/          to samo po polsku
-docs/bugs/        szablony zgłoszeń + przykłady
-.github/workflows CI (Newman przy pushu)
-reports/          raport HTML/JSON po `npm test` (nie commitowany)
-```
-
-## Wymagania
-
-- Node.js 20+
-- Postman (aplikacja desktop)
-- konto GitHub (do Actions)
+![API Tests](https://github.com/krzysztofp8852-create/api-tests-restful-booker/actions/workflows/api-tests.yml/badge.svg)
 
 ## Uruchomienie
 
@@ -39,38 +15,22 @@ npm install
 npm test
 ```
 
-Raport: `reports/newman-report.html`.
+Raport HTML: `reports/newman-report.html`.
 
-### Postman (ręcznie)
+W Postmanie: Import folderu `postman/`, environment **Restful Booker — Local**, uruchom kolekcję od góry (foldery 00–07). Kolejność jest ważna — token i `bookingId` są przekazywane między requestami, DELETE na końcu.
 
-1. Import → folder `postman/`
-2. Wybierz environment **Restful Booker — Local**
-3. Odpal kolekcję od góry (00 Health → 07 After delete) — kolejność ma znaczenie (token, `bookingId`, DELETE na końcu)
+## Struktura
 
-## Artefakty QA
-
-| Plik | Język |
-|---|---|
-| [docs/en/test-plan.md](docs/en/test-plan.md) | EN |
-| [docs/pl/plan-testow.md](docs/pl/plan-testow.md) | PL |
-| [docs/en/test-cases.md](docs/en/test-cases.md) | EN |
-| [docs/pl/przypadki-testowe.md](docs/pl/przypadki-testowe.md) | PL |
-| [docs/bugs/BUG-001.md](docs/bugs/BUG-001.md) … [BUG-003](docs/bugs/BUG-003.md) | EN |
-
-## Wpis do CV
-
-**Testy API — Restful Booker** · Postman, Newman, GitHub Actions
-
-- Zaprojektowałem przypadki testowe API (CRUD, autoryzacja, scenariusze negatywne).
-- Zautomatyzowałem kolekcję Postmana i podłączyłem ją do CI (Newman).
-- Udokumentowałem plan testów i zgłoszenia defektów.
-
-Po publicznym repo dodaj link: `https://github.com/krzysztofp8852-create/api-tests-restful-booker`
-
-## Badge CI
-
-Po pierwszym pushu na GitHub podmień poniżej `USER/REPO`:
-
-```markdown
-![API Tests](https://github.com/krzysztofp8852-create/api-tests-restful-booker/actions/workflows/api-tests.yml/badge.svg)
 ```
+postman/                 kolekcja i environment
+docs/en/                 plan i przypadki (EN)
+docs/pl/                 plan i przypadki (PL)
+docs/bugs/               zgłoszenia
+.github/workflows/       Newman na push
+```
+
+## Dokumentacja
+
+- [Plan testów (PL)](docs/pl/plan-testow.md) · [EN](docs/en/test-plan.md)
+- [Przypadki (PL)](docs/pl/przypadki-testowe.md) · [EN](docs/en/test-cases.md)
+- [BUG-001](docs/bugs/BUG-001.md) · [BUG-002](docs/bugs/BUG-002.md) · [BUG-003](docs/bugs/BUG-003.md)

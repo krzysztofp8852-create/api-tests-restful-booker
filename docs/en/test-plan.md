@@ -1,6 +1,6 @@
 # Test plan — Restful Booker API
 
-Status: **draft / template** · Author: `[FILL IN]` · Date: `[DATE]` · Version: `0.1`
+Status: **executed** · Author: Krzysztof Pabich · Date: 2026-08-13 · Version: `1.0`
 
 Polish copy: [`../pl/plan-testow.md`](../pl/plan-testow.md)
 
@@ -44,8 +44,8 @@ Verify that Restful Booker API behaves according to its public documentation for
 |---|---|---|
 | Smoke | yes | Ping + create + get |
 | Functional (positive) | yes | folders 00–05 |
-| Negative / validation | **to fill** | folder 90 |
-| Authorization | **to fill** | PUT/DELETE without token |
+| Negative / validation | yes | TC-009–TC-012, TC-017–TC-019, TC-022 |
+| Authorization | yes | TC-014, TC-015, TC-020, TC-021 (folder 05, before DELETE) |
 | Contract / schema | optional | `[FILL IN]` |
 | Regression | CI on every push | Newman |
 

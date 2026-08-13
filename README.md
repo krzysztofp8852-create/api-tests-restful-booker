@@ -1,10 +1,9 @@
-# Restful Booker — testy API (szablon)
+# Restful Booker — testy API
 
 Stanowisko testera API: **Postman + Newman + GitHub Actions**.
-Happy path działa od razu. Scenariusze negatywne, przypadki i bug reporty są szablonem do wypełnienia.
+**22 przypadki (TC-001–TC-022)** pokryte kolekcją Postmana. Happy path, negatywy i trzy zgłoszone defekty.
 
-**English:** see [README_EN.md](README_EN.md).  
-**Jak wypełniać:** [JAK-WYPELNIC.md](JAK-WYPELNIC.md)
+**English:** see [README_EN.md](README_EN.md).
 
 ## Cel
 
@@ -46,10 +45,9 @@ Raport: `reports/newman-report.html`.
 
 1. Import → folder `postman/`
 2. Wybierz environment **Restful Booker — Local**
-3. Odpal kolekcję od góry (00 Health → 05 Delete)
-4. Folder **90 Negative / TODO** uzupełniasz sam
+3. Odpal kolekcję od góry (00 Health → 07 After delete) — kolejność ma znaczenie (token, `bookingId`, DELETE na końcu)
 
-## Artefakty QA do wypełnienia
+## Artefakty QA
 
 | Plik | Język |
 |---|---|
@@ -57,8 +55,7 @@ Raport: `reports/newman-report.html`.
 | [docs/pl/plan-testow.md](docs/pl/plan-testow.md) | PL |
 | [docs/en/test-cases.md](docs/en/test-cases.md) | EN |
 | [docs/pl/przypadki-testowe.md](docs/pl/przypadki-testowe.md) | PL |
-| [docs/bugs/_TEMPLATE.md](docs/bugs/_TEMPLATE.md) | EN |
-| [docs/bugs/_TEMPLATE.pl.md](docs/bugs/_TEMPLATE.pl.md) | PL |
+| [docs/bugs/BUG-001.md](docs/bugs/BUG-001.md) … [BUG-003](docs/bugs/BUG-003.md) | EN |
 
 ## Wpis do CV
 
@@ -75,5 +72,5 @@ Po publicznym repo dodaj link: `https://github.com/krzysztofp8852-create/api-tes
 Po pierwszym pushu na GitHub podmień poniżej `USER/REPO`:
 
 ```markdown
-![API Tests](https://github.com/USER/REPO/actions/workflows/api-tests.yml/badge.svg)
+![API Tests](https://github.com/krzysztofp8852-create/api-tests-restful-booker/actions/workflows/api-tests.yml/badge.svg)
 ```

@@ -1,19 +1,12 @@
-# Restful Booker — API test workstation (template)
+# Restful Booker — API tests
 
-API testing setup: **Postman + Newman + GitHub Actions**.
-The happy path runs out of the box. Negative cases, test cases and bug reports are templates for you to fill in.
+**Postman + Newman + GitHub Actions.** 22 cases (TC-001–TC-022) covered by the collection, including negatives and three filed defects.
 
-**Polish:** [README.md](README.md) · **How to fill this in:** [JAK-WYPELNIC.md](JAK-WYPELNIC.md)
+**Polish:** [README.md](README.md)
 
 ## Goal
 
-Test the public [Restful Booker](https://restful-booker.herokuapp.com/apidoc/index.html) API:
-
-- authentication (token)
-- booking CRUD
-- negatives (validation, missing auth, unknown IDs)
-
-The API is shared and intentionally imperfect — good for writing defect reports.
+Test the public [Restful Booker](https://restful-booker.herokuapp.com/apidoc/index.html) API: auth, booking CRUD, negatives (validation, missing auth, unknown IDs). The API is shared and imperfect — defects are in `docs/bugs/`.
 
 ## Run
 
@@ -24,12 +17,9 @@ npm test
 
 HTML report: `reports/newman-report.html`.
 
-Import `postman/` into Postman, select **Restful Booker — Local**, run folders 00–05, then complete folder **90 Negative / TODO**.
+Import `postman/` into Postman, select **Restful Booker — Local**, run folders **00 → 07** in order.
 
-## QA artifacts to complete
+## QA artifacts
 
-- [Test plan](docs/en/test-plan.md)
-- [Test cases](docs/en/test-cases.md)
-- [Bug template](docs/bugs/_TEMPLATE.md)
-
-Polish copies live in `docs/pl/` and `docs/bugs/_TEMPLATE.pl.md`.
+- [Test plan](docs/en/test-plan.md) · [Test cases](docs/en/test-cases.md)
+- [BUG-001](docs/bugs/BUG-001.md) · [BUG-002](docs/bugs/BUG-002.md) · [BUG-003](docs/bugs/BUG-003.md)

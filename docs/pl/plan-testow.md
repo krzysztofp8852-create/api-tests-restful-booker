@@ -1,6 +1,6 @@
 # Plan testów — Restful Booker API
 
-Status: **szkic / szablon** · Autor: `[UZUPEŁNIJ]` · Data: `[DATA]` · Wersja: `0.1`
+Status: **wykonany** · Autor: Krzysztof Pabich · Data: 2026-08-13 · Wersja: `1.0`
 
 English copy: [`../en/test-plan.md`](../en/test-plan.md)
 
@@ -44,8 +44,8 @@ Sprawdzić, czy API Restful Booker działa zgodnie z publiczną dokumentacją w 
 |---|---|---|
 | Smoke | tak | Ping + create + get |
 | Funkcjonalne (pozytywne) | tak | foldery 00–05 |
-| Negatywne / walidacja | **do uzupełnienia** | folder 90 |
-| Autoryzacja | **do uzupełnienia** | PUT/DELETE bez tokenu |
+| Negatywne / walidacja | tak | TC-009–TC-012, TC-017–TC-019, TC-022 |
+| Autoryzacja | tak | TC-014, TC-015, TC-020, TC-021 (folder 05, przed DELETE) |
 | Kontrakt / schema | opcjonalnie | `[UZUPEŁNIJ]` |
 | Regresja | CI przy każdym pushu | Newman |
 

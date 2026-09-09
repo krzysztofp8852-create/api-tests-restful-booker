@@ -1,11 +1,17 @@
 {
   "name": "api-tests-restful-booker",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "API tests for Restful Booker — Postman, Newman, GitHub Actions",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "test": "newman run postman/Restful-Booker.postman_collection.json -e postman/Restful-Booker.postman_environment.json --reporters cli,json,htmlextra --reporter-json-export reports/newman-report.json --reporter-htmlextra-export reports/newman-report.html",
-    "test:cli": "newman run postman/Restful-Booker.postman_collection.json -e postman/Restful-Booker.postman_environment.json --reporters cli"
+    "test": "newman run postman/Restful-Booker.postman_collection.json -e postman/Restful-Booker.postman_environment.json --timeout-request 15000 --reporters cli,json,htmlextra --reporter-json-export reports/newman-report.json --reporter-htmlextra-export reports/newman-report.html --reporter-htmlextra-title \"Restful Booker API tests\"",
+    "test:cli": "newman run postman/Restful-Booker.postman_collection.json -e postman/Restful-Booker.postman_environment.json --timeout-request 15000 --reporters cli",
+    "test:ci": "newman run postman/Restful-Booker.postman_collection.json -e postman/Restful-Booker.postman_environment.json --timeout-request 20000 --reporters cli,json,junit,htmlextra --reporter-json-export reports/newman-report.json --reporter-junit-export reports/newman-report.xml --reporter-htmlextra-export reports/newman-report.html --reporter-htmlextra-title \"Restful Booker API tests\" --reporter-cli-no-banner",
+    "report:summary": "node scripts/report-summary.js reports/newman-report.json",
+    "lint:collection": "node scripts/validate-collection.js"
   },
   "devDependencies": {
     "newman": "^6.2.1",

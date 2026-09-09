@@ -2,21 +2,290 @@
   "info": {
     "_postman_id": "b2c3d4e5-f6a7-8901-bcde-restfulbooker02",
     "name": "Restful Booker API Tests",
-    "description": "Testy API Restful Booker (TC-001–TC-022).\n\nKolejność folderów ma znaczenie: token i bookingId powstają na happy path, testy autoryzacji przed DELETE.\n\nhttps://restful-booker.herokuapp.com/apidoc/index.html",
+    "description": "Restful Booker API tests (TC-001-TC-042).\n\nRun the whole collection from the top: folder order matters. The token and\nbookingId are produced on the happy path, the authorization negatives run\nbefore DELETE, and folder 08 removes every booking created by the negative\ncases so the shared sandbox stays clean.\n\nTest data (names, dates) is generated per run by the collection pre-request\nscript, so the suite is repeatable and never depends on hard-coded dates.\n\nhttps://restful-booker.herokuapp.com/apidoc/index.html",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
+  "auth": {
+    "type": "noauth"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// --- run-scoped test data (seeded once per run) --------------------------",
+          "// Restful Booker is a shared public sandbox: every run uses its own names so",
+          "// that the \"filter by firstname/lastname\" cases can assert an exact match.",
+          "const iso = function (offsetDays) {",
+          "    const d = new Date();",
+          "    d.setUTCDate(d.getUTCDate() + offsetDays);",
+          "    const pad = function (n) { return String(n).padStart(2, \"0\"); };",
+          "    return d.getUTCFullYear() + \"-\" + pad(d.getUTCMonth() + 1) + \"-\" + pad(d.getUTCDate());",
+          "};",
+          "",
+          "if (!pm.collectionVariables.get(\"runId\")) {",
+          "    const runId = (Date.now().toString(36) + Math.random().toString(36).slice(2, 6)).toUpperCase();",
+          "    pm.collectionVariables.set(\"runId\", runId);",
+          "    pm.collectionVariables.set(\"runFirstname\", (pm.environment.get(\"firstname\") || \"Qa\") + \"-\" + runId);",
+          "    pm.collectionVariables.set(\"runLastname\", (pm.environment.get(\"lastname\") || \"Tester\") + \"-\" + runId);",
+          "",
+          "    // Dates are always in the future relative to the run, never hard-coded.",
+          "    pm.collectionVariables.set(\"checkinDate\", iso(7));",
+          "    pm.collectionVariables.set(\"checkoutDate\", iso(11));",
+          "    pm.collectionVariables.set(\"checkoutDateUpdated\", iso(13));",
+          "    pm.collectionVariables.set(\"dateFilterFrom\", iso(6));",
+          "    pm.collectionVariables.set(\"dateFilterTo\", iso(12));",
+          "    // Deliberately inverted range for the negative case.",
+          "    pm.collectionVariables.set(\"invertedCheckin\", iso(20));",
+          "    pm.collectionVariables.set(\"invertedCheckout\", iso(1));",
+          "",
+          "    // Bookings created by negative cases are collected here and removed by",
+          "    // folder \"08 Cleanup\" so the sandbox is not polluted by every CI run.",
+          "    pm.collectionVariables.set(\"junkIds\", \"[]\");",
+          "    pm.collectionVariables.set(\"cleanupDeleted\", \"0\");",
+          "}",
+          "",
+          "// --- response contracts (JSON Schema, draft-04 compatible) ---------------",
+          "const isoDatePattern = \"^\\\\d{4}-\\\\d{2}-\\\\d{2}$\";",
+          "",
+          "const bookingSchema = {",
+          "    type: \"object\",",
+          "    required: [\"firstname\", \"lastname\", \"totalprice\", \"depositpaid\", \"bookingdates\"],",
+          "    properties: {",
+          "        firstname: { type: \"string\", minLength: 1 },",
+          "        lastname: { type: \"string\", minLength: 1 },",
+          "        totalprice: { type: [\"number\", \"null\"] },",
+          "        depositpaid: { type: \"boolean\" },",
+          "        bookingdates: {",
+          "            type: \"object\",",
+          "            required: [\"checkin\", \"checkout\"],",
+          "            properties: {",
+          "                checkin: { type: \"string\", pattern: isoDatePattern },",
+          "                checkout: { type: \"string\", pattern: isoDatePattern }",
+          "            },",
+          "            additionalProperties: false",
+          "        },",
+          "        additionalneeds: { type: \"string\" }",
+          "    },",
+          "    additionalProperties: false",
+          "};",
+          "",
+          "pm.collectionVariables.set(\"schemaBooking\", JSON.stringify(bookingSchema));",
+          "pm.collectionVariables.set(\"schemaCreatedBooking\", JSON.stringify({",
+          "    type: \"object\",",
+          "    required: [\"bookingid\", \"booking\"],",
+          "    properties: {",
+          "        bookingid: { type: \"integer\", minimum: 1 },",
+          "        booking: bookingSchema",
+          "    },",
+          "    additionalProperties: false",
+          "}));",
+          "pm.collectionVariables.set(\"schemaBookingIdList\", JSON.stringify({",
+          "    type: \"array\",",
+          "    items: {",
+          "        type: \"object\",",
+          "        required: [\"bookingid\"],",
+          "        properties: { bookingid: { type: \"integer\", minimum: 1 } },",
+          "        additionalProperties: false",
+          "    }",
+          "}));",
+          "pm.collectionVariables.set(\"schemaToken\", JSON.stringify({",
+          "    type: \"object\",",
+          "    required: [\"token\"],",
+          "    properties: { token: { type: \"string\", minLength: 1, pattern: \"^[A-Za-z0-9]+$\" } },",
+          "    additionalProperties: false",
+          "}));",
+          "pm.collectionVariables.set(\"schemaBadCredentials\", JSON.stringify({",
+          "    type: \"object\",",
+          "    required: [\"reason\"],",
+          "    properties: { reason: { type: \"string\", minLength: 1 } },",
+          "    additionalProperties: false",
+          "}));"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// --- global assertions (apply to every request in the collection) --------",
+          "const budget = Number(pm.environment.get(\"responseTimeBudgetMs\")) || 5000;",
+          "",
+          "pm.test(\"Global: response time under \" + budget + \" ms\", function () {",
+          "    pm.expect(pm.response.responseTime).to.be.below(budget);",
+          "});",
+          "",
+          "pm.test(\"Global: response declares a Content-Type\", function () {",
+          "    pm.expect(pm.response.headers.has(\"Content-Type\"), \"Content-Type header\").to.be.true;",
+          "});",
+          "",
+          "pm.test(\"Global: response body is not empty\", function () {",
+          "    pm.expect(pm.response.responseSize, \"response size in bytes\").to.be.above(0);",
+          "});"
+        ]
+      }
+    }
+  ],
   "variable": [
     {
       "key": "baseUrl",
-      "value": "https://restful-booker.herokuapp.com"
+      "value": "https://restful-booker.herokuapp.com",
+      "type": "string",
+      "description": "Fallback only — the environment value wins."
+    },
+    {
+      "key": "runId",
+      "value": "",
+      "type": "string",
+      "description": "Unique id of the current run, seeded by the collection pre-request script"
+    },
+    {
+      "key": "runFirstname",
+      "value": "",
+      "type": "string",
+      "description": "firstname used by this run (environment firstname + runId)"
+    },
+    {
+      "key": "runLastname",
+      "value": "",
+      "type": "string",
+      "description": "lastname used by this run (environment lastname + runId)"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string",
+      "description": "Auth token, set by TC-002"
+    },
+    {
+      "key": "bookingId",
+      "value": "",
+      "type": "string",
+      "description": "Booking under test, set by TC-003"
+    },
+    {
+      "key": "basicAuthBookingId",
+      "value": "",
+      "type": "string",
+      "description": "Fixture booking for TC-038"
+    },
+    {
+      "key": "checkinDate",
+      "value": "",
+      "type": "string",
+      "description": "today + 7 days (ISO)"
+    },
+    {
+      "key": "checkoutDate",
+      "value": "",
+      "type": "string",
+      "description": "today + 11 days (ISO)"
+    },
+    {
+      "key": "checkoutDateUpdated",
+      "value": "",
+      "type": "string",
+      "description": "today + 13 days (ISO), used by PUT/PATCH"
+    },
+    {
+      "key": "dateFilterFrom",
+      "value": "",
+      "type": "string",
+      "description": "today + 6 days (ISO), lower bound for TC-026"
+    },
+    {
+      "key": "dateFilterTo",
+      "value": "",
+      "type": "string",
+      "description": "today + 12 days (ISO), upper bound for TC-026"
+    },
+    {
+      "key": "invertedCheckin",
+      "value": "",
+      "type": "string",
+      "description": "today + 20 days (ISO), inverted range for TC-011"
+    },
+    {
+      "key": "invertedCheckout",
+      "value": "",
+      "type": "string",
+      "description": "today + 1 day (ISO), inverted range for TC-011"
+    },
+    {
+      "key": "junkIds",
+      "value": "",
+      "type": "string",
+      "description": "Teardown queue of bookings created by negative cases"
+    },
+    {
+      "key": "cleanupId",
+      "value": "",
+      "type": "string",
+      "description": "Booking currently being removed by folder 08"
+    },
+    {
+      "key": "cleanupIdle",
+      "value": "",
+      "type": "string",
+      "description": "true when the teardown queue was already empty"
+    },
+    {
+      "key": "cleanupDeleted",
+      "value": "",
+      "type": "string",
+      "description": "Number of bookings removed by folder 08"
+    },
+    {
+      "key": "schemaToken",
+      "value": "",
+      "type": "string",
+      "description": "JSON Schema — POST /auth success"
+    },
+    {
+      "key": "schemaBadCredentials",
+      "value": "",
+      "type": "string",
+      "description": "JSON Schema — POST /auth failure"
+    },
+    {
+      "key": "schemaBooking",
+      "value": "",
+      "type": "string",
+      "description": "JSON Schema — a booking resource"
+    },
+    {
+      "key": "schemaCreatedBooking",
+      "value": "",
+      "type": "string",
+      "description": "JSON Schema — POST /booking response"
+    },
+    {
+      "key": "schemaBookingIdList",
+      "value": "",
+      "type": "string",
+      "description": "JSON Schema — GET /booking response"
     }
   ],
   "item": [
     {
       "name": "00 Health",
+      "description": "Availability gate. If TC-001 fails the rest of the run is meaningless.",
       "item": [
         {
           "name": "TC-001 GET Ping — API is up",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/ping",
+            "description": "Health check. Docs: GET /ping -> 201 Created (text/plain)."
+          },
           "event": [
             {
               "listen": "test",
@@ -29,32 +298,46 @@
                   "pm.test(\"TC-001: body contains Created\", function () {",
                   "    pm.expect(pm.response.text()).to.include(\"Created\");",
                   "});",
-                  "pm.test(\"Response time is under 3000ms\", function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(3000);",
+                  "pm.test(\"TC-001: Content-Type is text/plain\", function () {",
+                  "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"text/plain\");",
                   "});"
                 ]
               }
             }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{baseUrl}}/ping",
-            "description": "Health check. Dokumentacja: GET /ping → 201 Created."
-          }
+          ]
         }
       ]
     },
     {
       "name": "01 Auth",
+      "description": "POST /auth. TC-002 stores the token used by every write request.",
       "item": [
         {
-          "name": "TC-002 POST Create token — valid",
+          "name": "TC-002 POST Create token — valid credentials",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/auth",
+            "description": "Happy path authentication. Saves the token as a collection variable.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
           "event": [
             {
               "listen": "test",
@@ -64,17 +347,21 @@
                   "pm.test(\"TC-002: status is 200\", function () {",
                   "    pm.response.to.have.status(200);",
                   "});",
-                  "pm.test(\"TC-002: JSON has a non-empty token\", function () {",
+                  "pm.test(\"TC-002: response matches the token schema\", function () {",
+                  "    pm.response.to.have.jsonSchema(JSON.parse(pm.collectionVariables.get(\"schemaToken\")));",
+                  "});",
+                  "pm.test(\"TC-002: token is stored for the following requests\", function () {",
                   "    const json = pm.response.json();",
-                  "    pm.expect(json).to.have.property(\"token\");",
-                  "    pm.expect(json.token).to.be.a(\"string\").and.not.empty;",
-                  "    pm.expect(json.token).to.match(/^[a-z0-9]+$/i);",
-                  "    pm.environment.set(\"token\", json.token);",
+                  "    pm.collectionVariables.set(\"token\", json.token);",
+                  "    pm.expect(pm.collectionVariables.get(\"token\")).to.be.a(\"string\").and.not.empty;",
                   "});"
                 ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "TC-009 POST Auth — invalid password",
           "request": {
             "method": "POST",
             "header": [
@@ -88,15 +375,17 @@
               }
             ],
             "url": "{{baseUrl}}/auth",
-            "description": "Tworzy token i zapisuje go do `token`.",
+            "description": "Documented Restful Booker behaviour: 200 + reason, not 401.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}"
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"wrong-password\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
-          }
-        },
-        {
-          "name": "TC-009 POST Auth — invalid password",
+          },
           "event": [
             {
               "listen": "test",
@@ -106,15 +395,24 @@
                   "pm.test(\"TC-009: status is 200 (documented Restful Booker behaviour)\", function () {",
                   "    pm.response.to.have.status(200);",
                   "});",
-                  "pm.test(\"TC-009: body has reason Bad credentials and no token\", function () {",
+                  "pm.test(\"TC-009: response matches the bad-credentials schema\", function () {",
+                  "    pm.response.to.have.jsonSchema(JSON.parse(pm.collectionVariables.get(\"schemaBadCredentials\")));",
+                  "});",
+                  "pm.test(\"TC-009: reason is Bad credentials and no token is issued\", function () {",
                   "    const json = pm.response.json();",
                   "    pm.expect(json.reason).to.eql(\"Bad credentials\");",
                   "    pm.expect(json).to.not.have.property(\"token\");",
+                  "});",
+                  "pm.test(\"TC-009: the valid token from TC-002 is untouched\", function () {",
+                  "    pm.expect(pm.collectionVariables.get(\"token\")).to.be.a(\"string\").and.not.empty;",
                   "});"
                 ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "TC-023 POST Auth — unknown username",
           "request": {
             "method": "POST",
             "header": [
@@ -128,15 +426,67 @@
               }
             ],
             "url": "{{baseUrl}}/auth",
-            "description": "Złe hasło. API zwraca 200 + { reason: Bad credentials } — tak jest w dokumentacji, nie 401.",
+            "description": "The API must not distinguish an unknown user from a wrong password (no user enumeration).",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"wrong-password\"\n}"
+              "raw": "{\n  \"username\": \"no-such-user\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"TC-023: status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"TC-023: reason is Bad credentials and no token is issued\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.reason).to.eql(\"Bad credentials\");",
+                  "    pm.expect(json).to.not.have.property(\"token\");",
+                  "});",
+                  "pm.test(\"TC-023: message does not leak whether the user exists\", function () {",
+                  "    const body = pm.response.text().toLowerCase();",
+                  "    pm.expect(body, \"no user-enumeration hint\").to.not.include(\"user\");",
+                  "    pm.expect(body, \"no user-enumeration hint\").to.not.include(\"not found\");",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "TC-017 POST Auth — empty credentials",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/auth",
+            "description": "Empty JSON body. Same handling as wrong credentials.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
           "event": [
             {
               "listen": "test",
@@ -146,7 +496,7 @@
                   "pm.test(\"TC-017: status is 200\", function () {",
                   "    pm.response.to.have.status(200);",
                   "});",
-                  "pm.test(\"TC-017: body has reason Bad credentials and no token\", function () {",
+                  "pm.test(\"TC-017: reason is Bad credentials and no token is issued\", function () {",
                   "    const json = pm.response.json();",
                   "    pm.expect(json.reason).to.eql(\"Bad credentials\");",
                   "    pm.expect(json).to.not.have.property(\"token\");",
@@ -154,7 +504,10 @@
                 ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "TC-024 POST Auth — SQL injection payload in username",
           "request": {
             "method": "POST",
             "header": [
@@ -168,20 +521,74 @@
               }
             ],
             "url": "{{baseUrl}}/auth",
-            "description": "Pusty obiekt zamiast username/password.",
+            "description": "Security smoke test: a classic tautology payload must not authenticate.",
             "body": {
               "mode": "raw",
-              "raw": "{}"
+              "raw": "{\n  \"username\": \"admin' OR '1'='1\",\n  \"password\": \"x' OR '1'='1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"TC-024: status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"TC-024: injection payload does not authenticate\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.not.have.property(\"token\");",
+                  "    pm.expect(json.reason).to.eql(\"Bad credentials\");",
+                  "});",
+                  "pm.test(\"TC-024: no stack trace or SQL error is leaked\", function () {",
+                  "    const body = pm.response.text().toLowerCase();",
+                  "    [\"sql\", \"syntax\", \"at object.\", \"sqlite\", \"mongo\"].forEach(function (needle) {",
+                  "        pm.expect(body, \"leaked internals: \" + needle).to.not.include(needle);",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
     {
       "name": "02 Create booking",
+      "description": "POST /booking. TC-003 is the happy path and provides bookingId; the rest are validation negatives.",
       "item": [
         {
-          "name": "TC-003 POST Create booking — valid",
+          "name": "TC-003 POST Create booking — valid payload",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/booking",
+            "description": "Creates the booking used by folders 03-07. Saves bookingId.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstname\": \"{{runFirstname}}\",\n  \"lastname\": \"{{runLastname}}\",\n  \"totalprice\": 120,\n  \"depositpaid\": true,\n  \"bookingdates\": {\n    \"checkin\": \"{{checkinDate}}\",\n    \"checkout\": \"{{checkoutDate}}\"\n  },\n  \"additionalneeds\": \"Breakfast\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
           "event": [
             {
               "listen": "test",
@@ -191,25 +598,31 @@
                   "pm.test(\"TC-003: status is 200\", function () {",
                   "    pm.response.to.have.status(200);",
                   "});",
-                  "pm.test(\"TC-003: bookingid is a number and is saved\", function () {",
-                  "    const json = pm.response.json();",
-                  "    pm.expect(json).to.have.property(\"bookingid\");",
-                  "    pm.expect(json.bookingid).to.be.a(\"number\");",
-                  "    pm.environment.set(\"bookingId\", String(json.bookingid));",
+                  "pm.test(\"TC-003: response matches the created-booking schema\", function () {",
+                  "    pm.response.to.have.jsonSchema(JSON.parse(pm.collectionVariables.get(\"schemaCreatedBooking\")));",
                   "});",
-                  "pm.test(\"TC-003: payload is echoed\", function () {",
+                  "pm.test(\"TC-003: bookingid is stored for the following requests\", function () {",
                   "    const json = pm.response.json();",
-                  "    pm.expect(json.booking.firstname).to.eql(pm.environment.get(\"firstname\"));",
-                  "    pm.expect(json.booking.lastname).to.eql(pm.environment.get(\"lastname\"));",
+                  "    pm.collectionVariables.set(\"bookingId\", String(json.bookingid));",
+                  "    pm.expect(json.bookingid).to.be.a(\"number\").and.above(0);",
+                  "});",
+                  "pm.test(\"TC-003: the request payload is echoed back unchanged\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.booking.firstname).to.eql(pm.collectionVariables.get(\"runFirstname\"));",
+                  "    pm.expect(json.booking.lastname).to.eql(pm.collectionVariables.get(\"runLastname\"));",
                   "    pm.expect(json.booking.totalprice).to.eql(120);",
-                  "    pm.expect(json.booking.bookingdates.checkin).to.eql(\"2026-09-01\");",
-                  "    pm.expect(json.booking.bookingdates.checkout).to.eql(\"2026-09-05\");",
+                  "    pm.expect(json.booking.depositpaid).to.eql(true);",
+                  "    pm.expect(json.booking.bookingdates.checkin).to.eql(pm.collectionVariables.get(\"checkinDate\"));",
+                  "    pm.expect(json.booking.bookingdates.checkout).to.eql(pm.collectionVariables.get(\"checkoutDate\"));",
                   "    pm.expect(json.booking.additionalneeds).to.eql(\"Breakfast\");",
                   "});"
                 ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "TC-010 POST Create booking — missing firstname",
           "request": {
             "method": "POST",
             "header": [
@@ -223,31 +636,39 @@
               }
             ],
             "url": "{{baseUrl}}/booking",
-            "description": "Happy path — nowa rezerwacja. Zapisuje `bookingId`.",
+            "description": "Expected 4xx. Actual 500 — BUG-001.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"firstname\": \"{{firstname}}\",\n  \"lastname\": \"{{lastname}}\",\n  \"totalprice\": 120,\n  \"depositpaid\": true,\n  \"bookingdates\": {\n    \"checkin\": \"2026-09-01\",\n    \"checkout\": \"2026-09-05\"\n  },\n  \"additionalneeds\": \"Breakfast\"\n}"
+              "raw": "{\n  \"lastname\": \"{{runLastname}}\",\n  \"totalprice\": 120,\n  \"depositpaid\": true,\n  \"bookingdates\": {\n    \"checkin\": \"{{checkinDate}}\",\n    \"checkout\": \"{{checkoutDate}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
-          }
-        },
-        {
-          "name": "TC-010 POST Create booking — missing firstname",
+          },
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"TC-010: status is 500 (known defect BUG-001 — expected 4xx)\", function () {",
+                  "pm.test(\"TC-010: status is 500 (known defect BUG-001 — 4xx expected)\", function () {",
                   "    pm.response.to.have.status(500);",
                   "});",
                   "pm.test(\"TC-010: body is Internal Server Error\", function () {",
                   "    pm.expect(pm.response.text()).to.include(\"Internal Server Error\");",
+                  "});",
+                  "pm.test(\"TC-010: no booking is created\", function () {",
+                  "    pm.expect(pm.response.text()).to.not.include(\"bookingid\");",
                   "});"
                 ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "TC-018 POST Create booking — missing lastname",
           "request": {
             "method": "POST",
             "header": [
@@ -261,15 +682,17 @@
               }
             ],
             "url": "{{baseUrl}}/booking",
-            "description": "Brak firstname. Faktycznie 500 (BUG-001). Oczekiwanie jakościowe: 4xx bez 500.",
+            "description": "Expected 4xx. Actual 500 — BUG-001.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"lastname\": \"{{lastname}}\",\n  \"totalprice\": 120,\n  \"depositpaid\": true,\n  \"bookingdates\": {\n    \"checkin\": \"2026-09-01\",\n    \"checkout\": \"2026-09-05\"\n  }\n}"
+              "raw": "{\n  \"firstname\": \"{{runFirstname}}\",\n  \"totalprice\": 120,\n  \"depositpaid\": true,\n  \"bookingdates\": {\n    \"checkin\": \"{{checkinDate}}\",\n    \"checkout\": \"{{checkoutDate}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
-          }
-        },
-        {
-          "name": "TC-018 POST Create booking — missing lastname",
+          },
           "event": [
             {
               "listen": "test",
@@ -285,7 +708,10 @@
                 ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "TC-030 POST Create booking — empty request body",
           "request": {
             "method": "POST",
             "header": [
@@ -299,34 +725,82 @@
               }
             ],
             "url": "{{baseUrl}}/booking",
-            "description": "Brak lastname. Ten sam wzorzec co TC-010 (BUG-001).",
+            "description": "No body at all. Expected 400. Actual 500 — BUG-001.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"firstname\": \"{{firstname}}\",\n  \"totalprice\": 120,\n  \"depositpaid\": true,\n  \"bookingdates\": {\n    \"checkin\": \"2026-09-01\",\n    \"checkout\": \"2026-09-05\"\n  }\n}"
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"TC-030: status is 500 (known defect BUG-001 — 400 expected)\", function () {",
+                  "    pm.response.to.have.status(500);",
+                  "});",
+                  "pm.test(\"TC-030: body is Internal Server Error\", function () {",
+                  "    pm.expect(pm.response.text()).to.include(\"Internal Server Error\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-029 POST Create booking — malformed JSON",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/booking",
+            "description": "Syntactically broken JSON is rejected correctly with 400 — no defect here.",
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"firstname\": \"Malformed\",",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"TC-029: status is 400\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test(\"TC-029: body is Bad Request\", function () {",
+                  "    pm.expect(pm.response.text()).to.include(\"Bad Request\");",
+                  "});",
+                  "pm.test(\"TC-029: no booking is created\", function () {",
+                  "    pm.expect(pm.response.text()).to.not.include(\"bookingid\");",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "TC-011 POST Create booking — checkout before checkin",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"TC-011: status is 200 (known defect BUG-002 — expected 4xx)\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "pm.test(\"TC-011: booking is created with inverted dates\", function () {",
-                  "    const json = pm.response.json();",
-                  "    pm.expect(json.bookingid).to.be.a(\"number\");",
-                  "    pm.expect(json.booking.bookingdates.checkin).to.eql(\"2026-09-10\");",
-                  "    pm.expect(json.booking.bookingdates.checkout).to.eql(\"2026-09-01\");",
-                  "});"
-                ]
-              }
-            }
-          ],
           "request": {
             "method": "POST",
             "header": [
@@ -340,33 +814,45 @@
               }
             ],
             "url": "{{baseUrl}}/booking",
-            "description": "checkout < checkin. API przyjmuje rezerwację (BUG-002).",
+            "description": "Inverted date range. Expected 4xx. Actual 200 — BUG-002.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"firstname\": \"{{firstname}}\",\n  \"lastname\": \"{{lastname}}\",\n  \"totalprice\": 50,\n  \"depositpaid\": true,\n  \"bookingdates\": {\n    \"checkin\": \"2026-09-10\",\n    \"checkout\": \"2026-09-01\"\n  }\n}"
+              "raw": "{\n  \"firstname\": \"{{runFirstname}}\",\n  \"lastname\": \"{{runLastname}}\",\n  \"totalprice\": 50,\n  \"depositpaid\": true,\n  \"bookingdates\": {\n    \"checkin\": \"{{invertedCheckin}}\",\n    \"checkout\": \"{{invertedCheckout}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"TC-011: status is 200 (known defect BUG-002 — 4xx expected)\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"TC-011: the booking is created with the inverted range\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.bookingid).to.be.a(\"number\");",
+                  "    pm.expect(json.booking.bookingdates.checkin).to.eql(pm.collectionVariables.get(\"invertedCheckin\"));",
+                  "    pm.expect(json.booking.bookingdates.checkout).to.eql(pm.collectionVariables.get(\"invertedCheckout\"));",
+                  "    pm.expect(new Date(json.booking.bookingdates.checkout).getTime(),",
+                  "        \"checkout is earlier than checkin\").to.be.below(new Date(json.booking.bookingdates.checkin).getTime());",
+                  "",
+                  "    const junk = JSON.parse(pm.collectionVariables.get(\"junkIds\") || \"[]\");",
+                  "    junk.push(json.bookingid);",
+                  "    pm.collectionVariables.set(\"junkIds\", JSON.stringify(junk));",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "TC-019 POST Create booking — totalprice as string",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"TC-019: status is 200 (known defect BUG-003 — expected 4xx)\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "pm.test(\"TC-019: totalprice is coerced to null\", function () {",
-                  "    const json = pm.response.json();",
-                  "    pm.expect(json.bookingid).to.be.a(\"number\");",
-                  "    pm.expect(json.booking.totalprice).to.equal(null);",
-                  "});"
-                ]
-              }
-            }
-          ],
           "request": {
             "method": "POST",
             "header": [
@@ -380,39 +866,251 @@
               }
             ],
             "url": "{{baseUrl}}/booking",
-            "description": "totalprice = \"abc\". API tworzy rezerwację z totalprice: null (BUG-003).",
+            "description": "Wrong type. Expected 4xx. Actual 200 with totalprice null — BUG-003.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"firstname\": \"{{firstname}}\",\n  \"lastname\": \"{{lastname}}\",\n  \"totalprice\": \"abc\",\n  \"depositpaid\": true,\n  \"bookingdates\": {\n    \"checkin\": \"2026-09-01\",\n    \"checkout\": \"2026-09-05\"\n  }\n}"
+              "raw": "{\n  \"firstname\": \"{{runFirstname}}\",\n  \"lastname\": \"{{runLastname}}\",\n  \"totalprice\": \"abc\",\n  \"depositpaid\": true,\n  \"bookingdates\": {\n    \"checkin\": \"{{checkinDate}}\",\n    \"checkout\": \"{{checkoutDate}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"TC-019: status is 200 (known defect BUG-003 — 4xx expected)\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"TC-019: totalprice is silently coerced to null\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.bookingid).to.be.a(\"number\");",
+                  "    pm.expect(json.booking.totalprice).to.equal(null);",
+                  "",
+                  "    const junk = JSON.parse(pm.collectionVariables.get(\"junkIds\") || \"[]\");",
+                  "    junk.push(json.bookingid);",
+                  "    pm.collectionVariables.set(\"junkIds\", JSON.stringify(junk));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-039 POST Create booking — depositpaid as string",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/booking",
+            "description": "Wrong type on a boolean. Expected 4xx. Actual 200 with depositpaid coerced to true — BUG-003.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstname\": \"{{runFirstname}}\",\n  \"lastname\": \"{{runLastname}}\",\n  \"totalprice\": 120,\n  \"depositpaid\": \"yes\",\n  \"bookingdates\": {\n    \"checkin\": \"{{checkinDate}}\",\n    \"checkout\": \"{{checkoutDate}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"TC-039: status is 200 (known defect BUG-003 — 4xx expected)\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"TC-039: the string \\\"yes\\\" is coerced to boolean true\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.bookingid).to.be.a(\"number\");",
+                  "    pm.expect(json.booking.depositpaid).to.equal(true);",
+                  "",
+                  "    const junk = JSON.parse(pm.collectionVariables.get(\"junkIds\") || \"[]\");",
+                  "    junk.push(json.bookingid);",
+                  "    pm.collectionVariables.set(\"junkIds\", JSON.stringify(junk));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-031 POST Create booking — unparsable date",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/booking",
+            "description": "Expected 4xx. Actual 200 and the date is stored as 0NaN-aN-aN — BUG-004.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstname\": \"{{runFirstname}}\",\n  \"lastname\": \"{{runLastname}}\",\n  \"totalprice\": 120,\n  \"depositpaid\": true,\n  \"bookingdates\": {\n    \"checkin\": \"not-a-date\",\n    \"checkout\": \"{{checkoutDate}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"TC-031: status is 200 (known defect BUG-004 — 4xx expected)\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"TC-031: the unparsable date is stored as the literal 0NaN-aN-aN\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.bookingid).to.be.a(\"number\");",
+                  "    pm.expect(json.booking.bookingdates.checkin).to.eql(\"0NaN-aN-aN\");",
+                  "",
+                  "    const junk = JSON.parse(pm.collectionVariables.get(\"junkIds\") || \"[]\");",
+                  "    junk.push(json.bookingid);",
+                  "    pm.collectionVariables.set(\"junkIds\", JSON.stringify(junk));",
+                  "});",
+                  "pm.test(\"TC-031: the stored checkin breaks the ISO date contract\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.booking.bookingdates.checkin).to.not.match(/^\\d{4}-\\d{2}-\\d{2}$/);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-032 POST Create booking — negative totalprice",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/booking",
+            "description": "Expected 4xx. Actual 200 and the negative price is persisted — BUG-005.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstname\": \"{{runFirstname}}\",\n  \"lastname\": \"{{runLastname}}\",\n  \"totalprice\": -500,\n  \"depositpaid\": true,\n  \"bookingdates\": {\n    \"checkin\": \"{{checkinDate}}\",\n    \"checkout\": \"{{checkoutDate}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"TC-032: status is 200 (known defect BUG-005 — 4xx expected)\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"TC-032: the negative price is persisted as sent\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.bookingid).to.be.a(\"number\");",
+                  "    pm.expect(json.booking.totalprice).to.eql(-500);",
+                  "",
+                  "    const junk = JSON.parse(pm.collectionVariables.get(\"junkIds\") || \"[]\");",
+                  "    junk.push(json.bookingid);",
+                  "    pm.collectionVariables.set(\"junkIds\", JSON.stringify(junk));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-033 POST Create booking — unknown extra field",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/booking",
+            "description": "Mass-assignment check: unknown fields must be dropped, not stored or reflected.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstname\": \"{{runFirstname}}\",\n  \"lastname\": \"{{runLastname}}\",\n  \"totalprice\": 120,\n  \"depositpaid\": true,\n  \"bookingdates\": {\n    \"checkin\": \"{{checkinDate}}\",\n    \"checkout\": \"{{checkoutDate}}\"\n  },\n  \"isAdmin\": true,\n  \"unknownField\": \"should be ignored\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"TC-033: status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"TC-033: unknown fields are dropped, not persisted\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.booking).to.not.have.property(\"isAdmin\");",
+                  "    pm.expect(json.booking).to.not.have.property(\"unknownField\");",
+                  "",
+                  "    const junk = JSON.parse(pm.collectionVariables.get(\"junkIds\") || \"[]\");",
+                  "    junk.push(json.bookingid);",
+                  "    pm.collectionVariables.set(\"junkIds\", JSON.stringify(junk));",
+                  "});",
+                  "pm.test(\"TC-033: response still matches the created-booking schema\", function () {",
+                  "    pm.response.to.have.jsonSchema(JSON.parse(pm.collectionVariables.get(\"schemaCreatedBooking\")));",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
     {
       "name": "03 Get booking",
+      "description": "GET /booking and GET /booking/:id — happy path, filters, content negotiation, unknown ids.",
       "item": [
         {
           "name": "TC-004 GET Booking by id",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"TC-004: status is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "pm.test(\"TC-004: booking matches created data\", function () {",
-                  "    const json = pm.response.json();",
-                  "    pm.expect(json.firstname).to.eql(pm.environment.get(\"firstname\"));",
-                  "    pm.expect(json.lastname).to.eql(pm.environment.get(\"lastname\"));",
-                  "    pm.expect(json).to.include.keys(\"totalprice\", \"depositpaid\", \"bookingdates\");",
-                  "});"
-                ]
-              }
-            }
-          ],
           "request": {
             "method": "GET",
             "header": [
@@ -422,35 +1120,117 @@
               }
             ],
             "url": "{{baseUrl}}/booking/{{bookingId}}",
-            "description": "Odczyt rezerwacji po ID z TC-003."
-          }
-        },
-        {
-          "name": "TC-005 GET All booking ids",
+            "description": "Reads back the booking created in TC-003 and validates the response contract."
+          },
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"TC-005: status is 200\", function () {",
+                  "pm.test(\"TC-004: status is 200\", function () {",
                   "    pm.response.to.have.status(200);",
                   "});",
-                  "pm.test(\"TC-005: body is a non-empty array of bookingid objects\", function () {",
-                  "    const json = pm.response.json();",
-                  "    pm.expect(json).to.be.an(\"array\").and.not.empty;",
-                  "    pm.expect(json[0]).to.have.property(\"bookingid\");",
+                  "pm.test(\"TC-004: response matches the booking schema\", function () {",
+                  "    pm.response.to.have.jsonSchema(JSON.parse(pm.collectionVariables.get(\"schemaBooking\")));",
                   "});",
-                  "pm.test(\"TC-005: created bookingId is on the list\", function () {",
+                  "pm.test(\"TC-004: the persisted booking equals what TC-003 sent\", function () {",
                   "    const json = pm.response.json();",
-                  "    const id = Number(pm.environment.get(\"bookingId\"));",
-                  "    const ids = json.map(function (row) { return row.bookingid; });",
-                  "    pm.expect(ids).to.include(id);",
+                  "    pm.expect(json.firstname).to.eql(pm.collectionVariables.get(\"runFirstname\"));",
+                  "    pm.expect(json.lastname).to.eql(pm.collectionVariables.get(\"runLastname\"));",
+                  "    pm.expect(json.totalprice).to.eql(120);",
+                  "    pm.expect(json.depositpaid).to.eql(true);",
+                  "    pm.expect(json.bookingdates.checkin).to.eql(pm.collectionVariables.get(\"checkinDate\"));",
+                  "    pm.expect(json.bookingdates.checkout).to.eql(pm.collectionVariables.get(\"checkoutDate\"));",
+                  "    pm.expect(json.additionalneeds).to.eql(\"Breakfast\");",
+                  "});",
+                  "pm.test(\"TC-004: Content-Type is application/json\", function () {",
+                  "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\");",
                   "});"
                 ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "TC-027 GET Booking by id — Accept: application/xml",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/xml"
+              }
+            ],
+            "url": "{{baseUrl}}/booking/{{bookingId}}",
+            "description": "Content negotiation: the same resource served as XML. The payload is XML but the Content-Type says text/html — BUG-006."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"TC-027: status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"TC-027: the body is an XML document carrying the same booking data\", function () {",
+                  "    const body = pm.response.text();",
+                  "    pm.expect(body).to.include(\"<booking>\");",
+                  "    pm.expect(body).to.include(\"<firstname>\" + pm.collectionVariables.get(\"runFirstname\") + \"</firstname>\");",
+                  "    pm.expect(body).to.include(\"<lastname>\" + pm.collectionVariables.get(\"runLastname\") + \"</lastname>\");",
+                  "    pm.expect(body).to.include(\"<checkin>\" + pm.collectionVariables.get(\"checkinDate\") + \"</checkin>\");",
+                  "});",
+                  "pm.test(\"TC-027: the XML parses into the same field values\", function () {",
+                  "    const parsed = xml2Json(pm.response.text());",
+                  "    pm.expect(parsed.booking.firstname).to.eql(pm.collectionVariables.get(\"runFirstname\"));",
+                  "    pm.expect(String(parsed.booking.totalprice)).to.eql(\"120\");",
+                  "});",
+                  "pm.test(\"TC-027: Content-Type is text/html (known defect BUG-006 — application/xml expected)\", function () {",
+                  "    const contentType = pm.response.headers.get(\"Content-Type\");",
+                  "    pm.expect(contentType).to.include(\"text/html\");",
+                  "    pm.expect(contentType, \"XML served under an HTML media type\").to.not.include(\"xml\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-042 GET Booking by id — unsupported Accept type",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/pdf"
+              }
+            ],
+            "url": "{{baseUrl}}/booking/{{bookingId}}",
+            "description": "An unsupported media type must give 406 Not Acceptable. Actual 418 — BUG-007."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"TC-042: status is 418 (known defect BUG-007 — 406 expected)\", function () {",
+                  "    pm.response.to.have.status(418);",
+                  "});",
+                  "pm.test(\"TC-042: body is the teapot joke instead of a content-negotiation error\", function () {",
+                  "    pm.expect(pm.response.text()).to.include(\"Teapot\");",
+                  "});",
+                  "pm.test(\"TC-042: no booking data is leaked in the error response\", function () {",
+                  "    pm.expect(pm.response.text()).to.not.include(pm.collectionVariables.get(\"runFirstname\"));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-005 GET All booking ids",
           "request": {
             "method": "GET",
             "header": [
@@ -460,11 +1240,45 @@
               }
             ],
             "url": "{{baseUrl}}/booking",
-            "description": "Lista ID. API współdzielone — nie asserujemy długości listy."
-          }
+            "description": "Shared sandbox: assert that our id is present, never the list length."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"TC-005: status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"TC-005: response matches the booking-id list schema\", function () {",
+                  "    pm.response.to.have.jsonSchema(JSON.parse(pm.collectionVariables.get(\"schemaBookingIdList\")));",
+                  "});",
+                  "pm.test(\"TC-005: the list is not empty\", function () {",
+                  "    pm.expect(pm.response.json()).to.be.an(\"array\").and.not.empty;",
+                  "});",
+                  "pm.test(\"TC-005: the booking from TC-003 is on the list\", function () {",
+                  "    const ids = pm.response.json().map(function (row) { return row.bookingid; });",
+                  "    pm.expect(ids).to.include(Number(pm.collectionVariables.get(\"bookingId\")));",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "TC-013 GET Booking — filter by firstname",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/booking?firstname={{runFirstname}}",
+            "description": "The run-scoped firstname is unique, so the filter must return exactly our bookings."
+          },
           "event": [
             {
               "listen": "test",
@@ -474,20 +1288,28 @@
                   "pm.test(\"TC-013: status is 200\", function () {",
                   "    pm.response.to.have.status(200);",
                   "});",
-                  "pm.test(\"TC-013: body is an array\", function () {",
-                  "    const json = pm.response.json();",
-                  "    pm.expect(json).to.be.an(\"array\");",
+                  "pm.test(\"TC-013: response matches the booking-id list schema\", function () {",
+                  "    pm.response.to.have.jsonSchema(JSON.parse(pm.collectionVariables.get(\"schemaBookingIdList\")));",
                   "});",
-                  "pm.test(\"TC-013: created bookingId is in the filtered list\", function () {",
-                  "    const json = pm.response.json();",
-                  "    const id = Number(pm.environment.get(\"bookingId\"));",
-                  "    const ids = json.map(function (row) { return row.bookingid; });",
-                  "    pm.expect(ids).to.include(id);",
+                  "pm.test(\"TC-013: the booking from TC-003 is in the filtered list\", function () {",
+                  "    const ids = pm.response.json().map(function (row) { return row.bookingid; });",
+                  "    pm.expect(ids).to.include(Number(pm.collectionVariables.get(\"bookingId\")));",
+                  "});",
+                  "pm.test(\"TC-013: the filter only returns bookings created by this run\", function () {",
+                  "    const ids = pm.response.json().map(function (row) { return row.bookingid; });",
+                  "    const mine = JSON.parse(pm.collectionVariables.get(\"junkIds\") || \"[]\")",
+                  "        .concat([Number(pm.collectionVariables.get(\"bookingId\"))]);",
+                  "    ids.forEach(function (id) {",
+                  "        pm.expect(mine, \"unexpected id \" + id + \" for a run-scoped firstname\").to.include(id);",
+                  "    });",
                   "});"
                 ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "TC-025 GET Booking — filter by lastname",
           "request": {
             "method": "GET",
             "header": [
@@ -496,12 +1318,73 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{baseUrl}}/booking?firstname={{firstname}}",
-            "description": "Filtr query firstname. Lista może zawierać też cudze rezerwacje o tym imieniu."
-          }
+            "url": "{{baseUrl}}/booking?lastname={{runLastname}}",
+            "description": "Same as TC-013 but on the lastname query parameter."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"TC-025: status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"TC-025: the booking from TC-003 is in the filtered list\", function () {",
+                  "    const ids = pm.response.json().map(function (row) { return row.bookingid; });",
+                  "    pm.expect(ids).to.include(Number(pm.collectionVariables.get(\"bookingId\")));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-026 GET Booking — filter by date range",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/booking?checkin={{dateFilterFrom}}&checkout={{dateFilterTo}}",
+            "description": "The range brackets the dates used by TC-003, so our booking must be returned."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"TC-026: status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"TC-026: response matches the booking-id list schema\", function () {",
+                  "    pm.response.to.have.jsonSchema(JSON.parse(pm.collectionVariables.get(\"schemaBookingIdList\")));",
+                  "});",
+                  "pm.test(\"TC-026: the booking from TC-003 falls inside the range\", function () {",
+                  "    const ids = pm.response.json().map(function (row) { return row.bookingid; });",
+                  "    pm.expect(ids).to.include(Number(pm.collectionVariables.get(\"bookingId\")));",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "TC-012 GET Booking — non-existent id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/booking/99999999"
+          },
           "event": [
             {
               "listen": "test",
@@ -517,7 +1400,10 @@
                 ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "TC-028 GET Booking — non-numeric id",
           "request": {
             "method": "GET",
             "header": [
@@ -526,37 +1412,36 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{baseUrl}}/booking/99999999",
-            "description": "Nieistniejące ID."
-          }
-        }
-      ]
-    },
-    {
-      "name": "04 Update booking",
-      "item": [
-        {
-          "name": "TC-006 PUT Full update",
+            "url": "{{baseUrl}}/booking/not-a-number",
+            "description": "A non-numeric path segment must not reach the data layer."
+          },
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"TC-006: status is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
+                  "pm.test(\"TC-028: status is 404\", function () {",
+                  "    pm.response.to.have.status(404);",
                   "});",
-                  "pm.test(\"TC-006: lastname and additionalneeds updated, firstname kept\", function () {",
-                  "    const json = pm.response.json();",
-                  "    pm.expect(json.firstname).to.eql(pm.environment.get(\"firstname\"));",
-                  "    pm.expect(json.lastname).to.eql(\"Updated\");",
-                  "    pm.expect(json.additionalneeds).to.eql(\"Late checkout\");",
-                  "    pm.expect(json.totalprice).to.eql(200);",
+                  "pm.test(\"TC-028: body is Not Found and no internals are leaked\", function () {",
+                  "    const body = pm.response.text();",
+                  "    pm.expect(body).to.include(\"Not Found\");",
+                  "    pm.expect(body.toLowerCase()).to.not.include(\"error:\");",
                   "});"
                 ]
               }
             }
-          ],
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 Update booking",
+      "description": "PUT / PATCH /booking/:id — full and partial updates, both auth styles, payload validation.",
+      "item": [
+        {
+          "name": "TC-006 PUT Full update — cookie token",
           "request": {
             "method": "PUT",
             "header": [
@@ -574,34 +1459,44 @@
               }
             ],
             "url": "{{baseUrl}}/booking/{{bookingId}}",
-            "description": "Pełna aktualizacja. Wymaga tokenu (Cookie).",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"firstname\": \"{{firstname}}\",\n  \"lastname\": \"Updated\",\n  \"totalprice\": 200,\n  \"depositpaid\": false,\n  \"bookingdates\": {\n    \"checkin\": \"2026-09-01\",\n    \"checkout\": \"2026-09-07\"\n  },\n  \"additionalneeds\": \"Late checkout\"\n}"
+              "raw": "{\n  \"firstname\": \"{{runFirstname}}\",\n  \"lastname\": \"Updated\",\n  \"totalprice\": 200,\n  \"depositpaid\": false,\n  \"bookingdates\": {\n    \"checkin\": \"{{checkinDate}}\",\n    \"checkout\": \"{{checkoutDateUpdated}}\"\n  },\n  \"additionalneeds\": \"Late checkout\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
-          }
-        },
-        {
-          "name": "TC-007 PATCH Partial update",
+          },
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"TC-007: status is 200\", function () {",
+                  "pm.test(\"TC-006: status is 200\", function () {",
                   "    pm.response.to.have.status(200);",
                   "});",
-                  "pm.test(\"TC-007: only additionalneeds changed\", function () {",
+                  "pm.test(\"TC-006: response matches the booking schema\", function () {",
+                  "    pm.response.to.have.jsonSchema(JSON.parse(pm.collectionVariables.get(\"schemaBooking\")));",
+                  "});",
+                  "pm.test(\"TC-006: every field from the request is applied\", function () {",
                   "    const json = pm.response.json();",
-                  "    pm.expect(json.additionalneeds).to.eql(\"Parking\");",
-                  "    pm.expect(json.firstname).to.eql(pm.environment.get(\"firstname\"));",
+                  "    pm.expect(json.firstname).to.eql(pm.collectionVariables.get(\"runFirstname\"));",
                   "    pm.expect(json.lastname).to.eql(\"Updated\");",
+                  "    pm.expect(json.totalprice).to.eql(200);",
+                  "    pm.expect(json.depositpaid).to.eql(false);",
+                  "    pm.expect(json.bookingdates.checkout).to.eql(pm.collectionVariables.get(\"checkoutDateUpdated\"));",
+                  "    pm.expect(json.additionalneeds).to.eql(\"Late checkout\");",
                   "});"
                 ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "TC-007 PATCH Partial update — cookie token",
           "request": {
             "method": "PATCH",
             "header": [
@@ -619,20 +1514,295 @@
               }
             ],
             "url": "{{baseUrl}}/booking/{{bookingId}}",
-            "description": "Częściowa aktualizacja. Wymaga tokenu.",
+            "description": "Only additionalneeds is sent; every other field from TC-006 must survive.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"additionalneeds\": \"Parking\"\n}"
+              "raw": "{\n  \"additionalneeds\": \"Parking\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"TC-007: status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"TC-007: additionalneeds is updated\", function () {",
+                  "    pm.expect(pm.response.json().additionalneeds).to.eql(\"Parking\");",
+                  "});",
+                  "pm.test(\"TC-007: the fields that were not sent are unchanged\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.firstname).to.eql(pm.collectionVariables.get(\"runFirstname\"));",
+                  "    pm.expect(json.lastname).to.eql(\"Updated\");",
+                  "    pm.expect(json.totalprice).to.eql(200);",
+                  "    pm.expect(json.depositpaid).to.eql(false);",
+                  "    pm.expect(json.bookingdates.checkout).to.eql(pm.collectionVariables.get(\"checkoutDateUpdated\"));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-037 PATCH Empty body — no-op",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "token={{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/booking/{{bookingId}}",
+            "description": "An empty patch must be accepted and must not change or clear any field.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"TC-037: status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"TC-037: the booking is returned unchanged\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.firstname).to.eql(pm.collectionVariables.get(\"runFirstname\"));",
+                  "    pm.expect(json.lastname).to.eql(\"Updated\");",
+                  "    pm.expect(json.totalprice).to.eql(200);",
+                  "    pm.expect(json.additionalneeds).to.eql(\"Parking\");",
+                  "});",
+                  "pm.test(\"TC-037: no field is dropped from the schema\", function () {",
+                  "    pm.response.to.have.jsonSchema(JSON.parse(pm.collectionVariables.get(\"schemaBooking\")));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-035 PUT Full update — HTTP Basic auth",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/booking/{{bookingId}}",
+            "description": "Restful Booker documents Basic auth as an alternative to the token cookie.",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{username}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{password}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstname\": \"{{runFirstname}}\",\n  \"lastname\": \"BasicAuth\",\n  \"totalprice\": 99,\n  \"depositpaid\": true,\n  \"bookingdates\": {\n    \"checkin\": \"{{checkinDate}}\",\n    \"checkout\": \"{{checkoutDateUpdated}}\"\n  },\n  \"additionalneeds\": \"Parking\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"TC-035: status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"TC-035: Basic auth is accepted instead of the token cookie\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.lastname).to.eql(\"BasicAuth\");",
+                  "    pm.expect(json.totalprice).to.eql(99);",
+                  "    pm.expect(json.depositpaid).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-034 PUT Full update — incomplete payload",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "token={{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/booking/{{bookingId}}",
+            "description": "PUT without lastname is rejected with 400 — unlike POST, which returns 500 (see BUG-001).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstname\": \"Incomplete\",\n  \"totalprice\": 1,\n  \"depositpaid\": true,\n  \"bookingdates\": {\n    \"checkin\": \"{{checkinDate}}\",\n    \"checkout\": \"{{checkoutDateUpdated}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"TC-034: status is 400\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test(\"TC-034: body is Bad Request\", function () {",
+                  "    pm.expect(pm.response.text()).to.include(\"Bad Request\");",
+                  "});",
+                  "pm.test(\"TC-034: the rejected update did not modify the booking\", function (done) {",
+                  "    pm.sendRequest({",
+                  "        url: pm.environment.get(\"baseUrl\") + \"/booking/\" + pm.collectionVariables.get(\"bookingId\"),",
+                  "        method: \"GET\",",
+                  "        header: { Accept: \"application/json\" }",
+                  "    }, function (err, res) {",
+                  "        pm.expect(err).to.equal(null);",
+                  "        pm.expect(res.code).to.eql(200);",
+                  "        pm.expect(res.json().lastname, \"lastname after the rejected PUT\").to.eql(\"BasicAuth\");",
+                  "        pm.expect(res.json().totalprice, \"totalprice after the rejected PUT\").to.eql(99);",
+                  "        done();",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-036 PUT Full update — non-existent id",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "token={{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/booking/99999999",
+            "description": "Authenticated update of an unknown id. Restful Booker answers 405, not 404.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstname\": \"Ghost\",\n  \"lastname\": \"Booking\",\n  \"totalprice\": 1,\n  \"depositpaid\": true,\n  \"bookingdates\": {\n    \"checkin\": \"{{checkinDate}}\",\n    \"checkout\": \"{{checkoutDateUpdated}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"TC-036: status is 405 (documented quirk — 404 would be expected)\", function () {",
+                  "    pm.response.to.have.status(405);",
+                  "});",
+                  "pm.test(\"TC-036: body is Method Not Allowed\", function () {",
+                  "    pm.expect(pm.response.text()).to.include(\"Method Not Allowed\");",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
     {
       "name": "05 Authorization negatives",
+      "description": "Every write endpoint must reject a missing or invalid credential. Runs BEFORE folder 06 because it needs a booking that still exists.",
       "item": [
         {
           "name": "TC-014 PUT without token",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/booking/{{bookingId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstname\": \"NoAuth\",\n  \"lastname\": \"User\",\n  \"totalprice\": 1,\n  \"depositpaid\": true,\n  \"bookingdates\": {\n    \"checkin\": \"{{checkinDate}}\",\n    \"checkout\": \"{{checkoutDate}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
           "event": [
             {
               "listen": "test",
@@ -648,45 +1818,10 @@
                 ]
               }
             }
-          ],
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Accept",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{baseUrl}}/booking/{{bookingId}}",
-            "description": "PUT bez Cookie. Musi lecieć przed DELETE.",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"firstname\": \"NoAuth\",\n  \"lastname\": \"User\",\n  \"totalprice\": 1,\n  \"depositpaid\": true,\n  \"bookingdates\": {\n    \"checkin\": \"2026-09-01\",\n    \"checkout\": \"2026-09-02\"\n  }\n}"
-            }
-          }
+          ]
         },
         {
           "name": "TC-021 PUT with invalid token",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"TC-021: status is 403\", function () {",
-                  "    pm.response.to.have.status(403);",
-                  "});",
-                  "pm.test(\"TC-021: body is Forbidden\", function () {",
-                  "    pm.expect(pm.response.text()).to.include(\"Forbidden\");",
-                  "});"
-                ]
-              }
-            }
-          ],
           "request": {
             "method": "PUT",
             "header": [
@@ -704,31 +1839,35 @@
               }
             ],
             "url": "{{baseUrl}}/booking/{{bookingId}}",
-            "description": "PUT z Cookie token=invalidtoken.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"firstname\": \"NoAuth\",\n  \"lastname\": \"User\",\n  \"totalprice\": 1,\n  \"depositpaid\": true,\n  \"bookingdates\": {\n    \"checkin\": \"2026-09-01\",\n    \"checkout\": \"2026-09-02\"\n  }\n}"
+              "raw": "{\n  \"firstname\": \"NoAuth\",\n  \"lastname\": \"User\",\n  \"totalprice\": 1,\n  \"depositpaid\": true,\n  \"bookingdates\": {\n    \"checkin\": \"{{checkinDate}}\",\n    \"checkout\": \"{{checkoutDate}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
-          }
-        },
-        {
-          "name": "TC-020 PATCH without token",
+          },
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"TC-020: status is 403\", function () {",
+                  "pm.test(\"TC-021: status is 403\", function () {",
                   "    pm.response.to.have.status(403);",
                   "});",
-                  "pm.test(\"TC-020: body is Forbidden\", function () {",
+                  "pm.test(\"TC-021: body is Forbidden\", function () {",
                   "    pm.expect(pm.response.text()).to.include(\"Forbidden\");",
                   "});"
                 ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "TC-020 PATCH without token",
           "request": {
             "method": "PATCH",
             "header": [
@@ -742,15 +1881,101 @@
               }
             ],
             "url": "{{baseUrl}}/booking/{{bookingId}}",
-            "description": "PATCH bez Cookie.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"additionalneeds\": \"X\"\n}"
+              "raw": "{\n  \"additionalneeds\": \"Should not be applied\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"TC-020: status is 403\", function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "pm.test(\"TC-020: body is Forbidden\", function () {",
+                  "    pm.expect(pm.response.text()).to.include(\"Forbidden\");",
+                  "});",
+                  "pm.test(\"TC-020: the rejected patch did not modify the booking\", function (done) {",
+                  "    pm.sendRequest({",
+                  "        url: pm.environment.get(\"baseUrl\") + \"/booking/\" + pm.collectionVariables.get(\"bookingId\"),",
+                  "        method: \"GET\",",
+                  "        header: { Accept: \"application/json\" }",
+                  "    }, function (err, res) {",
+                  "        pm.expect(err).to.equal(null);",
+                  "        pm.expect(res.json().additionalneeds).to.not.eql(\"Should not be applied\");",
+                  "        done();",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-040 DELETE with invalid Basic auth",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/booking/{{bookingId}}",
+            "description": "Wrong Basic credentials must be rejected the same way as a missing token.",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "no-such-user",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "no-such-password",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"TC-040: status is 403\", function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "pm.test(\"TC-040: body is Forbidden\", function () {",
+                  "    pm.expect(pm.response.text()).to.include(\"Forbidden\");",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "TC-015 DELETE without token",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/booking/{{bookingId}}"
+          },
           "event": [
             {
               "listen": "test",
@@ -762,32 +1987,53 @@
                   "});",
                   "pm.test(\"TC-015: body is Forbidden\", function () {",
                   "    pm.expect(pm.response.text()).to.include(\"Forbidden\");",
+                  "});",
+                  "pm.test(\"TC-015: the booking still exists after the rejected delete\", function (done) {",
+                  "    pm.sendRequest({",
+                  "        url: pm.environment.get(\"baseUrl\") + \"/booking/\" + pm.collectionVariables.get(\"bookingId\"),",
+                  "        method: \"GET\",",
+                  "        header: { Accept: \"application/json\" }",
+                  "    }, function (err, res) {",
+                  "        pm.expect(err).to.equal(null);",
+                  "        pm.expect(res.code, \"booking must survive an unauthorised DELETE\").to.eql(200);",
+                  "        done();",
+                  "    });",
                   "});"
                 ]
               }
             }
-          ],
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": "{{baseUrl}}/booking/{{bookingId}}",
-            "description": "DELETE bez Cookie. Booking musi nadal istnieć."
-          }
+          ]
         }
       ]
     },
     {
       "name": "06 Delete booking",
+      "description": "DELETE /booking/:id with both supported credential styles.",
       "item": [
         {
-          "name": "TC-008 DELETE Booking",
+          "name": "TC-008 DELETE Booking — cookie token",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "token={{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/booking/{{bookingId}}",
+            "description": "Documented Restful Booker quirk: 201 Created instead of 204 No Content."
+          },
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"TC-008: status is 201\", function () {",
+                  "pm.test(\"TC-008: status is 201 (documented quirk — 204 would be expected)\", function () {",
                   "    pm.response.to.have.status(201);",
                   "});",
                   "pm.test(\"TC-008: body contains Created\", function () {",
@@ -796,26 +2042,124 @@
                 ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "SETUP POST Create booking for TC-038",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/booking",
+            "description": "Fixture for TC-038. Stored separately so the main bookingId stays deleted for folder 07.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstname\": \"{{runFirstname}}\",\n  \"lastname\": \"BasicAuthDelete\",\n  \"totalprice\": 10,\n  \"depositpaid\": true,\n  \"bookingdates\": {\n    \"checkin\": \"{{checkinDate}}\",\n    \"checkout\": \"{{checkoutDate}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"SETUP: fixture booking for TC-038 is created\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.bookingid).to.be.a(\"number\");",
+                  "    pm.collectionVariables.set(\"basicAuthBookingId\", String(json.bookingid));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-038 DELETE Booking — HTTP Basic auth",
           "request": {
             "method": "DELETE",
             "header": [
               {
-                "key": "Cookie",
-                "value": "token={{token}}"
+                "key": "Accept",
+                "value": "application/json"
               }
             ],
-            "url": "{{baseUrl}}/booking/{{bookingId}}",
-            "description": "Usunięcie rezerwacji. Restful Booker zwraca 201."
-          }
+            "url": "{{baseUrl}}/booking/{{basicAuthBookingId}}",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{username}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{password}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"TC-038: status is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test(\"TC-038: body contains Created\", function () {",
+                  "    pm.expect(pm.response.text()).to.include(\"Created\");",
+                  "});",
+                  "pm.test(\"TC-038: the fixture booking is gone\", function (done) {",
+                  "    pm.sendRequest({",
+                  "        url: pm.environment.get(\"baseUrl\") + \"/booking/\" + pm.collectionVariables.get(\"basicAuthBookingId\"),",
+                  "        method: \"GET\",",
+                  "        header: { Accept: \"application/json\" }",
+                  "    }, function (err, res) {",
+                  "        pm.expect(err).to.equal(null);",
+                  "        pm.expect(res.code).to.eql(404);",
+                  "        done();",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
     {
       "name": "07 After delete",
+      "description": "State of a deleted resource.",
       "item": [
         {
           "name": "TC-016 GET Booking after delete",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/booking/{{bookingId}}"
+          },
           "event": [
             {
               "listen": "test",
@@ -831,7 +2175,10 @@
                 ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "TC-041 GET All booking ids after delete",
           "request": {
             "method": "GET",
             "header": [
@@ -840,19 +2187,51 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{baseUrl}}/booking/{{bookingId}}",
-            "description": "Odczyt po DELETE."
-          }
-        },
-        {
-          "name": "TC-022 DELETE already deleted booking",
+            "url": "{{baseUrl}}/booking?firstname={{runFirstname}}",
+            "description": "The deleted booking must disappear from the filtered list as well, not only from GET by id."
+          },
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"TC-022: status is 405\", function () {",
+                  "pm.test(\"TC-041: status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"TC-041: the deleted bookingId is no longer returned by the filter\", function () {",
+                  "    const ids = pm.response.json().map(function (row) { return row.bookingid; });",
+                  "    pm.expect(ids).to.not.include(Number(pm.collectionVariables.get(\"bookingId\")));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-022 DELETE already deleted booking",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "token={{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/booking/{{bookingId}}",
+            "description": "Repeated delete. Restful Booker answers 405, not 404 — documented quirk."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"TC-022: status is 405 (documented quirk — 404 would be expected)\", function () {",
                   "    pm.response.to.have.status(405);",
                   "});",
                   "pm.test(\"TC-022: body is Method Not Allowed\", function () {",
@@ -861,18 +2240,90 @@
                 ]
               }
             }
-          ],
+          ]
+        }
+      ]
+    },
+    {
+      "name": "08 Cleanup",
+      "description": "Removes every booking created by the negative cases. The request re-queues itself until the junkIds queue is empty, so the shared sandbox is not polluted by each CI run.",
+      "item": [
+        {
+          "name": "CLEAN DELETE bookings created by negative cases",
           "request": {
             "method": "DELETE",
             "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
               {
                 "key": "Cookie",
                 "value": "token={{token}}"
               }
             ],
-            "url": "{{baseUrl}}/booking/{{bookingId}}",
-            "description": "Ponowny DELETE z tokenem. API zwraca 405, nie 404."
-          }
+            "url": "{{baseUrl}}/booking/{{cleanupId}}",
+            "description": "Self-looping teardown. See the pre-request and test scripts."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Take the next booking id off the teardown queue.",
+                  "const queue = JSON.parse(pm.collectionVariables.get(\"junkIds\") || \"[]\");",
+                  "",
+                  "if (queue.length === 0) {",
+                  "    // Nothing was queued: target the already-deleted main booking so the",
+                  "    // request is harmless, and report an idle teardown.",
+                  "    pm.collectionVariables.set(\"cleanupId\", pm.collectionVariables.get(\"bookingId\"));",
+                  "    pm.collectionVariables.set(\"cleanupIdle\", \"true\");",
+                  "} else {",
+                  "    pm.collectionVariables.set(\"cleanupId\", String(queue.shift()));",
+                  "    pm.collectionVariables.set(\"junkIds\", JSON.stringify(queue));",
+                  "    pm.collectionVariables.set(\"cleanupIdle\", \"false\");",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const idle = pm.collectionVariables.get(\"cleanupIdle\") === \"true\";",
+                  "const remaining = JSON.parse(pm.collectionVariables.get(\"junkIds\") || \"[]\");",
+                  "const cleanupId = pm.collectionVariables.get(\"cleanupId\");",
+                  "",
+                  "if (idle) {",
+                  "    pm.test(\"Cleanup: teardown queue was empty, nothing to remove\", function () {",
+                  "        pm.expect(remaining).to.be.an(\"array\").that.is.empty;",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Cleanup: booking \" + cleanupId + \" removed (201) or already gone (405)\", function () {",
+                  "        pm.expect(pm.response.code, \"DELETE /booking/\" + cleanupId).to.be.oneOf([201, 405]);",
+                  "    });",
+                  "    pm.collectionVariables.set(",
+                  "        \"cleanupDeleted\",",
+                  "        String(Number(pm.collectionVariables.get(\"cleanupDeleted\") || 0) + 1)",
+                  "    );",
+                  "}",
+                  "",
+                  "if (remaining.length > 0) {",
+                  "    // Re-queue this same request until the teardown queue drains.",
+                  "    pm.execution.setNextRequest(pm.info.requestName);",
+                  "} else {",
+                  "    pm.test(\"Cleanup: teardown queue is drained\", function () {",
+                  "        pm.expect(remaining.length, \"bookings left behind\").to.eql(0);",
+                  "    });",
+                  "    // Last request of the collection — end the run explicitly.",
+                  "    pm.execution.setNextRequest(null);",
+                  "}"
+                ]
+              }
+            }
+          ]
         }
       ]
     }

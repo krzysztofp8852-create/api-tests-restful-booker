@@ -2,14 +2,24 @@ name: API Tests
 
 on:
   push:
-    branches: [main]
+    branches: ["**"]
   pull_request:
+  schedule:
+    # Nightly regression run at 04:15 UTC — catches changes on the public sandbox.
+    - cron: "15 4 * * *"
   workflow_dispatch:
+
+# A newer push on the same ref cancels the previous run (nightly runs are never cancelled).
+concurrency:
+  group: api-tests-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 jobs:
   newman:
     name: Newman — Restful Booker
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -17,19 +27,41 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version-file: .nvmrc
           cache: npm
 
       - name: Install dependencies
         run: npm ci
 
+      - name: Validate collection and traceability
+        run: npm run lint:collection
+
+      - name: Wait for the API to answer
+        # The public sandbox runs on a dyno that can be asleep. Waking it up
+        # here keeps the first real request out of the response-time budget.
+        run: |
+          for attempt in 1 2 3 4 5 6; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
+              https://restful-booker.herokuapp.com/ping || true)
+            echo "attempt $attempt: GET /ping -> $code"
+            if [ "$code" = "201" ]; then exit 0; fi
+            sleep 10
+          done
+          echo "::error::Restful Booker did not answer GET /ping with 201 after 6 attempts"
+          exit 1
+
       - name: Run Postman collection (Newman)
-        run: npm test
+        run: npm run test:ci
+
+      - name: Publish run summary
+        if: always()
+        run: npm run report:summary
 
       - name: Upload Newman reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: newman-reports
+          name: newman-reports-${{ github.run_number }}
           path: reports/
-          if-no-files-found: ignore
+          retention-days: 30
+          if-no-files-found: warn
